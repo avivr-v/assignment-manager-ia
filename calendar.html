@@ -31,6 +31,28 @@
         padding: 12px;
         font-size: 20px;
         font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .calendar-header button {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        font-size: 18px;
+        padding: 5px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+
+    .calendar-header button:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .calendar-header span {
+        flex: 1;
     }
 
     .calendar-days,
@@ -51,6 +73,7 @@
         padding: 20px;
         border: 1px solid #ececec;
         text-align: center;
+        cursor: default;
     }
 
     .today {
@@ -68,6 +91,10 @@
         background-color: #f7c3c3;
         border: 2px solid #d93025;
     }
+
+    .other-month {
+        color: #ccc;
+    }
 </style>
 </head>
 <body>
@@ -77,7 +104,11 @@
 <br>
 
 <div class="calendar">
-    <div id="calendar-header" class="calendar-header">Month Year</div>
+    <div id="calendar-header" class="calendar-header">
+        <button id="prevMonth" onclick="changeMonth(-1)">‹</button>
+        <span id="monthYear">Month Year</span>
+        <button id="nextMonth" onclick="changeMonth(1)">›</button>
+    </div>
 
     <div class="calendar-days">
         <div>Sun</div><div>Mon</div><div>Tue</div>
@@ -87,6 +118,8 @@
     <div id="calendar-dates" class="calendar-dates"></div>
 </div>
 
+<br>
+<button onclick="goToToday()" style="padding: 8px 16px; cursor: pointer;">Go to Today</button>
 <br><br>
 
 <div id="assignmentListContainer">
@@ -176,21 +209,54 @@ class AssignmentManager {
 }
 </script>
 
-<script> // calendar logic
+<script> // calendar logic with month navigation
+
+// Global variables to track current view
+var currentMonth;
+var currentYear;
+var today = new Date();
+
+// Initialize the calendar with current month
+function initCalendar() {
+    currentMonth = today.getMonth();
+    currentYear = today.getFullYear();
+    renderCalendar();
+}
+
+// Change month (direction: -1 for previous, 1 for next)
+function changeMonth(direction) {
+    currentMonth += direction;
+    
+    if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+    } else if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+    }
+    
+    renderCalendar();
+}
+
+// Go back to today's month
+function goToToday() {
+    currentMonth = today.getMonth();
+    currentYear = today.getFullYear();
+    renderCalendar();
+}
+
 // renders calendar
 function renderCalendar() {
-    var today = new Date();
-    var displayMonth = today.getMonth();
-    var displayYear = today.getFullYear();
-
-    document.getElementById("calendar-header").textContent =
-        today.toLocaleString("default", { month: "long" }) + " " + displayYear;
+    var monthNames = ["January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December"];
+    
+    document.getElementById("monthYear").textContent = monthNames[currentMonth] + " " + currentYear;
 
     var datesContainer = document.getElementById("calendar-dates");
     datesContainer.innerHTML = "";
 
-    var firstDay = new Date(displayYear, displayMonth, 1).getDay();
-    var daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
+    var firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    var daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     // empty slots
     for (var i = 0; i < firstDay; i++) {
@@ -203,20 +269,24 @@ function renderCalendar() {
         var cell = document.createElement("div");
         cell.textContent = day;
 
+        // Check if this is today
         if (
             day === today.getDate() &&
-            displayMonth === today.getMonth() &&
-            displayYear === today.getFullYear()
+            currentMonth === today.getMonth() &&
+            currentYear === today.getFullYear()
         ) {
             cell.className = "today";
         }
 
         datesContainer.appendChild(cell);
     }
+    
+    // Highlight assignments after rendering
+    highlightAssignments();
 }
 
 
-// highlights assignment deadlines (traditional JS)
+// highlights assignment deadlines
 function highlightAssignments() {
     var userId = localStorage.getItem("currentUserId");
     if (!userId) return;
@@ -225,13 +295,9 @@ function highlightAssignments() {
     var assignments = manager.assignments;
 
     var cells = document.querySelectorAll("#calendar-dates div");
-    var today = new Date();
+    var firstDay = new Date(currentYear, currentMonth, 1).getDay();
 
-    var displayMonth = today.getMonth();
-    var displayYear = today.getFullYear();
-    var firstDay = new Date(displayYear, displayMonth, 1).getDay();
-
-    // loop through assignments using classic for loop
+    // loop through assignments
     for (var i = 0; i < assignments.length; i++) {
         var a = assignments[i];
         var dDate = a.parseDeadline();
@@ -241,13 +307,17 @@ function highlightAssignments() {
         var m = dDate.getMonth();
         var y = dDate.getFullYear();
 
-        if (m !== displayMonth || y !== displayYear) continue;
+        if (m !== currentMonth || y !== currentYear) continue;
 
         var index = firstDay + (d - 1);
         var cell = cells[index];
         if (!cell) continue;
 
-        if (dDate < today) {
+        // Reset the date to start of day for fair comparison
+        var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        var deadlineStart = new Date(y, m, d);
+
+        if (deadlineStart < todayStart) {
             cell.className += " overdue-day";
         } else {
             cell.className += " assignment-day";
@@ -257,8 +327,7 @@ function highlightAssignments() {
 
 
 // initialize
-renderCalendar();
-highlightAssignments();
+initCalendar();
 </script>
 
 <script> // upcoming or overdue assignments list
@@ -280,7 +349,7 @@ function loadCalendarAssignmentList() {
     overdueList.innerHTML = "";
     upcomingList.innerHTML = "";
 
-    var today = new Date();
+    var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     var foundUpcoming = false;
     var foundOverdue = false;
@@ -314,7 +383,7 @@ function loadCalendarAssignmentList() {
         div.appendChild(dateSpan);
 
         // overdue vs upcoming
-        if (dDate < today) {
+        if (dDate < todayStart) {
             overdueList.appendChild(div);
             foundOverdue = true;
         } else {
