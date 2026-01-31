@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Assignment Manager</h1>
+<h3>Log In</h3>
+
+<form id="loginForm">
+    <label>Username:</label>
+    <input type="text" id="username"><br><br>
+
+    <label>Password:</label>
+    <input type="text" id="password"><br><br>
+
+    <p id="errorMessage" style="color:red;"></p>
+
+    <input class="nav" type="button" value="CONTINUE" id="loginBtn">
+</form>
+
+<h4>Don't have an account?</h4>
+<button class="nav" onclick="window.location.href='signup.html'">SIGN UP</button>
+
+<script> // User class
+class User {
+    constructor(username, password){
+        this.id = this.generateId();
+        this.username = username;
+        this.password = password;
+    }
+
+    // generates unique ID for user
+    generateId(){
+        return "user_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    }
+
+    //checks whether password entered during login matches user's password
+     validatePassword(password) {
+        return this.password === password;
+    }
+
+   toJSON() {
+        return {
+            id: this.id,
+            username: this.username,
+            password: this.password   // FIXED: save real password
+        };
+    }
+}
+</script>
+
+<script> // AuthManager class
+  class AuthManager{
+    constructor() {
+    // loads stored users from localStorage 
+    const stored = JSON.parse(localStorage.getItem("users")) || [];
+
+    // convert plain objects back into User instances and preserves their IDs 
+    this.users = stored.map(function(u) {
+        const userObj = new User(u.username, u.password);
+        userObj.id = u.id; // keep the same ID
+        return userObj;
+    });
+
+    // tracks the currently logged-in user ID 
+    this.currentUserId = null;
+}
+
+
+    // checks if user already exists
+    userExists(username) {
+        for (let i = 0; i < this.users.length; i++) {
+            if (this.users[i].username === username) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // signups a new user
+    signUp(username, password){
+        const errorMessage = document.getElementById("errorMessage");
+        
+        if (this.userExists(username)){
+            errorMessage.textContent = "Username already exists.";
+            return false;
+        }
+
+        const newUser = new User(username, password);
+        this.users.push(newUser);
+        localStorage.setItem("users", JSON.stringify(this.users)); 
+        
+        return true;
+    }
+
+    // logins user
+    login(username, password) {
+    const errorMessage = document.getElementById("errorMessage");
+    let user = null;
+
+   
+    for (let i = 0; i < this.users.length; i++) {
+        if (this.users[i].username === username) {
+            user = this.users[i];
+            break;
+        }
+    }
+
+    // error handling 
+    if (!user || !user.validatePassword(password)) {
+        errorMessage.textContent = "Username or password are incorrect.";
+        return false;
+    }
+
+    // login successful 
+    this.loggedInUser = user;           
+    this.currentUserId = user.id;    
+    localStorage.setItem("currentUserId", user.id);
+
+    return true;
+}
+
+}
+</script>
+
+<script> // login logic
+  
+const auth = new AuthManager();
+
+document.getElementById("loginBtn").onclick = function () {
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+    const errorMessage = document.getElementById("errorMessage");
+
+    if (!username || !password) {
+        errorMessage.textContent = "Please fill all fields.";
+        return;
+    }
+
+    const success = auth.login(username, password);
+
+    if (!success) {
+        return;
+    }
+
+    localStorage.setItem("currentUserId", auth.loggedInUser.id);
+    window.location.href = "todo.html";
+};
+</script>
+
+</body>
+</html>

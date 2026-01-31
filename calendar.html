@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar</title>
+<link rel="stylesheet" href="styles.css">
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f9;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .calendar {
+        width: 450px;
+        background: white;
+        border: 1px solid #ddd;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .calendar-header {
+        background: #007bff;
+        color: white;
+        text-align: center;
+        padding: 12px;
+        font-size: 20px;
+        font-weight: bold;
+    }
+
+    .calendar-days,
+    .calendar-dates {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+    }
+
+    .calendar-days div {
+        background: #007bff;
+        color: white;
+        text-align: center;
+        padding: 10px;
+        font-weight: bold;
+    }
+
+    .calendar-dates div {
+        padding: 20px;
+        border: 1px solid #ececec;
+        text-align: center;
+    }
+
+    .today {
+        background-color: #ffe58a;
+        font-weight: bold;
+        border: 2px solid #ffcc00;
+    }
+
+    .assignment-day {
+        background-color: #c3f7c3;
+        border: 2px solid #34a853;
+    }
+
+    .overdue-day {
+        background-color: #f7c3c3;
+        border: 2px solid #d93025;
+    }
+</style>
+</head>
+<body>
+
+<button class="nav" onclick="location.href='todo.html'">To-do List</button> <button class="nav">Calendar</button>
+
+<br>
+
+<div class="calendar">
+    <div id="calendar-header" class="calendar-header">Month Year</div>
+
+    <div class="calendar-days">
+        <div>Sun</div><div>Mon</div><div>Tue</div>
+        <div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+
+    <div id="calendar-dates" class="calendar-dates"></div>
+</div>
+
+<br><br>
+
+<div id="assignmentListContainer">
+
+    <h2>Assignments</h2>
+
+    <div id="upcomingSection">
+        <h3>Upcoming</h3>
+        <div id="upcomingList"></div>
+    </div>
+    <div id="overdueSection">
+        <h3>Overdue</h3>
+        <div id="overdueList"></div>
+    </div>
+
+    <p id="noAssignmentsMsg">No upcoming assignments!</p>
+</div>
+
+
+<script> // Assignment.js
+class Assignment {
+    constructor(name, subject="", deadline=null, priority="medium", details="") {
+        this.id = this.generateId();
+        this.name = name;
+        this.subject = subject;
+        this.deadline = deadline;      // dd/mm/yyyy
+        this.priority = priority;
+        this.details = details;
+        this.substeps = [];
+        this.completed = false;
+    }
+
+    generateId() {
+        return "assignment_" + Date.now() + "_" + Math.random().toString(36).substring(2,9);
+    }
+
+    parseDeadline() {
+        if (!this.deadline) return null;
+
+        const parts = this.deadline.split("/");
+        if (parts.length !== 3) return null;
+
+        let day = parseInt(parts[0], 10);
+        let month = parseInt(parts[1], 10) - 1;
+        let year = parseInt(parts[2], 10);
+
+        // allow 2-digit year
+        if (year < 100) year += 2000;
+
+        return new Date(year, month, day);
+    }
+
+    static fromJSON(data) {
+        let a = new Assignment(
+            data.name,
+            data.subject,
+            data.deadline,
+            data.priority,
+            data.details
+        );
+        a.id = data.id;
+        a.completed = data.completed || false;
+
+        // load substeps if provided
+        a.substeps = data.substeps ? data.substeps.map(s => s) : [];
+
+        return a;
+    }
+}
+
+
+class AssignmentManager {
+    constructor(userId) {
+        this.userId = userId;
+        this.assignments = [];
+        this.loadAssignments();
+    }
+
+    loadAssignments() {
+        const key = "assignments_" + this.userId;
+        const stored = localStorage.getItem(key);
+        if (!stored) return;
+
+        const parsed = JSON.parse(stored);
+        this.assignments = parsed.map(a => Assignment.fromJSON(a));
+    }
+}
+</script>
+
+<script> // calendar logic
+// renders calendar
+function renderCalendar() {
+    var today = new Date();
+    var displayMonth = today.getMonth();
+    var displayYear = today.getFullYear();
+
+    document.getElementById("calendar-header").textContent =
+        today.toLocaleString("default", { month: "long" }) + " " + displayYear;
+
+    var datesContainer = document.getElementById("calendar-dates");
+    datesContainer.innerHTML = "";
+
+    var firstDay = new Date(displayYear, displayMonth, 1).getDay();
+    var daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
+
+    // empty slots
+    for (var i = 0; i < firstDay; i++) {
+        var emptyCell = document.createElement("div");
+        datesContainer.appendChild(emptyCell);
+    }
+
+    // actual dates
+    for (var day = 1; day <= daysInMonth; day++) {
+        var cell = document.createElement("div");
+        cell.textContent = day;
+
+        if (
+            day === today.getDate() &&
+            displayMonth === today.getMonth() &&
+            displayYear === today.getFullYear()
+        ) {
+            cell.className = "today";
+        }
+
+        datesContainer.appendChild(cell);
+    }
+}
+
+
+// highlights assignment deadlines (traditional JS)
+function highlightAssignments() {
+    var userId = localStorage.getItem("currentUserId");
+    if (!userId) return;
+
+    var manager = new AssignmentManager(userId);
+    var assignments = manager.assignments;
+
+    var cells = document.querySelectorAll("#calendar-dates div");
+    var today = new Date();
+
+    var displayMonth = today.getMonth();
+    var displayYear = today.getFullYear();
+    var firstDay = new Date(displayYear, displayMonth, 1).getDay();
+
+    // loop through assignments using classic for loop
+    for (var i = 0; i < assignments.length; i++) {
+        var a = assignments[i];
+        var dDate = a.parseDeadline();
+        if (!dDate) continue;
+
+        var d = dDate.getDate();
+        var m = dDate.getMonth();
+        var y = dDate.getFullYear();
+
+        if (m !== displayMonth || y !== displayYear) continue;
+
+        var index = firstDay + (d - 1);
+        var cell = cells[index];
+        if (!cell) continue;
+
+        if (dDate < today) {
+            cell.className += " overdue-day";
+        } else {
+            cell.className += " assignment-day";
+        }
+    }
+}
+
+
+// initialize
+renderCalendar();
+highlightAssignments();
+</script>
+
+<script> // upcoming or overdue assignments list
+
+function loadCalendarAssignmentList() {
+    var userId = localStorage.getItem("currentUserId");
+    if (!userId) return;
+
+    var manager = new AssignmentManager(userId);
+    var assignments = manager.assignments;
+
+    var overdueList = document.getElementById("overdueList");
+    var upcomingList = document.getElementById("upcomingList");
+
+    var overdueSection = document.getElementById("overdueSection");
+    var upcomingSection = document.getElementById("upcomingSection");
+    var emptyMsg = document.getElementById("noAssignmentsMsg");
+
+    overdueList.innerHTML = "";
+    upcomingList.innerHTML = "";
+
+    var today = new Date();
+
+    var foundUpcoming = false;
+    var foundOverdue = false;
+
+    for (var i = 0; i < assignments.length; i++) {
+        var a = assignments[i];
+
+        // only show uncompleted
+        if (a.completed) continue;
+
+        var dDate = a.parseDeadline();
+        if (!dDate) continue;
+
+        // build item UI
+        var div = document.createElement("div");
+        div.style.padding = "6px 0";
+
+        var btn = document.createElement("button");
+        btn.textContent = a.name + " — " + (a.subject ? a.subject : "No subject");
+        btn.setAttribute("data-id", a.id);
+        btn.onclick = function() {
+            var ID = this.getAttribute("data-id");
+            window.location.href = "assignmentEditor.html?id=" + ID;
+        };
+
+        var dateSpan = document.createElement("span");
+        dateSpan.style.marginLeft = "10px";
+        dateSpan.textContent = a.deadline ? a.deadline : "";
+
+        div.appendChild(btn);
+        div.appendChild(dateSpan);
+
+        // overdue vs upcoming
+        if (dDate < today) {
+            overdueList.appendChild(div);
+            foundOverdue = true;
+        } else {
+            upcomingList.appendChild(div);
+            foundUpcoming = true;
+        }
+    }
+
+    overdueSection.style.display = foundOverdue ? "block" : "none";
+    upcomingSection.style.display = foundUpcoming ? "block" : "none";
+
+    emptyMsg.style.display = (!foundUpcoming && !foundOverdue) ? "block" : "none";
+}
+
+loadCalendarAssignmentList();
+</script>
+
+</body>
+</html>

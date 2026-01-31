@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>To-do</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Assignment creation</h1>
+     <form id="assignmentForm">
+        <label>Name: *</label>
+        <input type="text" id="aname" required><br><br>
+
+        <label>Subject:</label>
+        <input type="text" id="subject"><br><br>
+
+        <label>Priority:</label>
+        <select id="priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+        </select><br><br>
+
+        <label>Deadline:</label>
+        <input type="text" id="deadline" placeholder="dd/mm/yyyy"><br><br>
+
+        <label>Details:</label>
+        <textarea id="details" rows="3"></textarea><br><br>
+
+        <hr>
+        <br>
+        <input class="nav" type="submit" value="Create Assignment">
+        <button type="button" onclick="window.location.href='todo.html'">Cancel</button>
+    </form>
+
+<script>
+// make sure user is logged in. if not, redirect back to login
+const currentUserId = localStorage.getItem("currentUserId");
+
+if (!currentUserId) {
+    window.location.href = "login.html";
+}
+// Assignment class
+class Assignment{
+    constructor(name, subject="", deadline=null, priority="medium", details=""){
+        this.id = this.generateId();
+        this.name = name; //only requiered field
+        this.subject = subject;
+        this.deadline = deadline; // format: dd/mm/yy
+        this.priority = priority; // "low", "medium", or "high"
+        this.details = details;
+        this.hasSubsteps = false;
+        this.completed = false;
+        this.substeps = [] // stores reference to child substep objects
+    }
+
+    
+    // generates unique ID for assignment to be used for deleting, editing etc
+    generateId(){
+        return "assignment_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    }
+
+    // adds a substep to this assignment
+    addSubstep(substep){
+        this.substeps.push(substep);
+    }
+
+    // removes a substep by ID
+    removeSubstep(substepId){
+        this.substeps = this.substeps.filter(substep => substep.id !== substepId)
+    }
+
+    // checks if assignment has substeps
+    hasSubsteps(){
+        return this.substeps.length > 0;
+    }
+
+    // toggles completion status of Assignment 
+    toggleComplete(){
+        this.completed = !this.completed;
+    }
+
+    // checks if all substeps are complete
+    areAllSubstepsComplete(){
+        if(!this.hasSubsteps()){
+            return false;
+        }
+        for(let i = 0; i < this.substeps.length; i++){
+            if(!this.substeps[i].completed){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // auto-toggles completion status if all substeps are complete
+    checkAutoComplete(){
+        if(this.areAllSubstepsComplete()){
+            this.completed = true;
+            return true;
+        }
+        return false;
+    }
+
+    // checks if priority entered is "low", "medium", or "high"
+    checkPriority(){
+        const validPriorities = ["low", "medium", "high"];
+        if (!validPriorities.includes(this.priority)){
+            return "Please enter either 'low', 'medium', or 'high' in this field"
+        }
+    }
+
+    // checks if Assignment is overdue
+    isOverDue(){
+
+    }
+
+    // parses deadline from dd/mm/yy format to Date object
+    parseDeadline(){
+        if(!this.deadline){
+            return null;
+        }
+        const parts = this.deadline.split('/');
+        if(parts.length !== 3){
+            return null;
+        }
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        return new Date(day, month, year);
+    }
+
+    // convert Assignment to JSON for storage
+    toJSON(){
+        return {
+            id: this.id,
+            name: this.name,
+            subject: this.subject,
+            deadline: this.deadline,
+            priority: this.priority,
+            details: this.details,
+            substeps: this.substeps.map(function (substep) {
+                return substep.toJSON();
+            }),
+            completed: this.completed,
+            dateCreated: this.dateCreated
+        };
+    }
+} 
+
+// Assignment creation logic
+document.getElementById("assignmentForm").addEventListener("submit", function(event) {
+    event.preventDefault(); // stop page reload
+
+    // get form values
+    const name = document.getElementById("aname").value.trim();
+    const subject = document.getElementById("subject").value.trim();
+    const priority = document.getElementById("priority").value;
+    const deadline = document.getElementById("deadline").value.trim();
+    const details = document.getElementById("details").value.trim();
+
+    // create Assignment object
+    const newAssignment = new Assignment(
+        name,
+        subject,
+        deadline,
+        priority,
+        details
+    );
+
+
+    // save to localStorage 
+    const key = "assignments_" + currentUserId;
+
+    let assignments = JSON.parse(localStorage.getItem(key) || "[]");
+    assignments.push(newAssignment);
+localStorage.setItem(key, JSON.stringify(assignments));
+
+
+    // redirect to main page 
+    window.location.href = "todo.html";
+});
+</script>
+
+</body>
+</html>

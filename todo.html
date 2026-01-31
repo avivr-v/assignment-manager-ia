@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>To-do</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<button class="nav">To-do list</button> <button class="nav" onclick="window.location.href = 'calendar.html'";>Calendar</button>
+<hr>
+<button onclick="window.location.href = 'assignmentCreator.html'">Add Assignment</button> 
+<br>
+
+<div id="todoSection">
+    <p id="todop">No assignments yet. Create one to get started!</p>
+    <div id="activeList"></div>
+</div>
+
+
+<div id="completedSection" style="display:none;">
+    <h3>Completed Assignments</h3>
+    <div id="completedList"></div>
+</div>
+
+<hr>
+<button class="nav" onclick="window.location.href = 'login.html'">Log out</button>
+
+<script>
+// clear assignments from page
+function clearAssignments() {
+    document.getElementById("activeList").innerHTML = "";
+    document.getElementById("completedList").innerHTML = "";
+    document.getElementById("todop").style.display = "block";
+    document.getElementById("completedSection").style.display = "none";
+}
+
+// initializes page for the specific user
+function initForUser() { 
+    window.currentUserId = localStorage.getItem("currentUserId");
+
+    if (!currentUserId) {
+        console.error("No user logged in.");
+        return;
+    }
+
+    clearAssignments(); 
+    loadAssignments();
+}
+
+// loads assignments from localStorage
+function loadAssignments() {
+    var key = "assignments_" + currentUserId;
+    var assignments = JSON.parse(localStorage.getItem(key) || "[]");
+
+    var activeList = document.getElementById("activeList");
+    var completedList = document.getElementById("completedList");
+    var emptyMsg = document.getElementById("todop");
+    var completedSection = document.getElementById("completedSection");
+
+    activeList.innerHTML = "";
+    completedList.innerHTML = "";
+
+    if (assignments.length === 0) {
+        emptyMsg.style.display = "block";
+        completedSection.style.display = "none";
+        return;
+    }
+
+    emptyMsg.style.display = "none";
+
+    var completedCount = 0;
+
+    assignments.forEach(function(a, index) {
+        var container = document.createElement("div");
+        container.className = "assignment";
+
+        // Priority class
+        var priorityClass = "priority-low";
+        if (a.priority === "high") { priorityClass = "priority-high"; }
+        else if (a.priority === "medium") { priorityClass = "priority-medium"; }
+
+        // Checkbox
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = a.completed ? true : false;
+
+        checkbox.addEventListener("change", function() {
+            assignments[index].completed = checkbox.checked;
+            localStorage.setItem("assignments_" + currentUserId, JSON.stringify(assignments));
+            loadAssignments();
+        });
+
+        // Assignment button
+        var btn = document.createElement("button");
+        btn.innerText = a.name + " — " + (a.subject ? a.subject : "No subject");
+        btn.setAttribute("data-id", a.id);
+        btn.onclick = function() {
+             var id = this.getAttribute("data-id");
+              window.location.href = "assignmentEditor.html?id=" + id;
+        };
+
+        var deadlineBox = document.createElement("span");
+        deadlineBox.className = "deadline-box";
+        deadlineBox.innerText = a.deadline ? a.deadline : "No date";
+
+        var dot = document.createElement("span");
+        dot.className = "priority-dot " + priorityClass;
+
+        container.appendChild(checkbox);
+        container.appendChild(btn);
+        container.appendChild(deadlineBox);
+        container.appendChild(dot);
+
+        if (a.completed) {
+            completedList.appendChild(container);
+            completedCount++;
+        } else {
+            activeList.appendChild(container);
+        }
+    });
+
+    if (completedCount > 0) {
+    completedSection.style.display = "block";
+} else {
+    completedSection.style.display = "none";
+}
+}
+
+initForUser();
+</script>
+
+</body>
+</html>

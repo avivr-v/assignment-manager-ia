@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Assignment editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .info-row {
+    display: flex;
+    gap: 15px; 
+    align-items: center;
+    font-weight: bold;
+}
+    </style>
+</head>
+<body>
+<button class="nav" onclick="window.location.href='todo.html'">Back to To-Do List</button>
+<br>
+<h1 id="assignmentName"></h1>  
+
+<div class="info-row"> 
+<p id="assignmentSubject"></p>
+<p id="assignmentDeadline">No deadline</p> 
+</div>
+<p id="assignmentDetails">No details provided.</p>
+<button onclick="editAssignment()">Edit assignment</button> 
+
+
+<br>
+
+<h3>Substeps:</h3>
+<div id="substepsList">
+    <p id="noSubsteps">No substeps yet.</p>
+</div>
+
+<button class="nav" id="addSubstepBtn" onclick="toggleSubstepForm()">Add substep</button>
+
+<div id="substepForm" style="display:none;">
+    <p>Add New Substep:</p>
+    <label>Name:</label>
+    <input type="text" id="substepName"><br><br>
+    <label>Description:</label>
+    <input type="text" id="substepDescription"><br><br>
+    <button onclick="createSubstep()">Save Substep</button>
+    <button onclick="cancelSubstepForm()">Cancel</button>
+</div>
+
+<br>
+<button class="nav" onclick="deleteAssignment()">Delete assignment</button>
+
+</body>
+</html>
+
+<script>//Assignment.js
+class Assignment{
+    constructor(name, subject="", deadline=null, priority="medium", details=""){
+        this.id = this.generateId();
+        this.name = name;
+        this.subject = subject;
+        this.deadline = deadline;
+        this.priority = priority;
+        this.details = details;
+        this.substeps = [];
+        this.completed = false;
+        this.dateCreated = new Date();
+    }
+
+    generateId(){
+        return "assignment_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    }
+
+    addSubstep(substep){
+        this.substeps.push(substep);
+    }
+
+    removeSubstep(substepId){
+        var newSubsteps = [];
+        for (var i = 0; i < this.substeps.length; i++) {
+            if (this.substeps[i].id !== substepId) {
+                newSubsteps.push(this.substeps[i]);
+            }
+        }
+        this.substeps = newSubsteps;
+    }
+
+    hasSubsteps(){
+        return this.substeps.length > 0;
+    }
+
+    toggleComplete(){
+        this.completed = !this.completed;
+    }
+
+    areAllSubstepsComplete(){
+        if(!this.hasSubsteps()){
+            return false;
+        }
+        for(var i = 0; i < this.substeps.length; i++){
+            if(!this.substeps[i].completed){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    checkAutoComplete(){
+        if(this.areAllSubstepsComplete()){
+            this.completed = true;
+            return true;
+        }
+        return false;
+    }
+
+    parseDeadline(){
+        if(!this.deadline){
+            return null;
+        }
+        var parts = this.deadline.split('/');
+        if(parts.length !== 3){
+            return null;
+        }
+        var day = parseInt(parts[0], 10);
+        var month = parseInt(parts[1], 10) - 1;
+        var year = parseInt(parts[2], 10);
+        return new Date(year, month, day);
+    }
+
+    toJSON(){
+        var substepsData = [];
+        for (var i = 0; i < this.substeps.length; i++) {
+            substepsData.push(this.substeps[i].toJSON());
+        }
+        
+        return {
+            id: this.id,
+            name: this.name,
+            subject: this.subject,
+            deadline: this.deadline,
+            priority: this.priority,
+            details: this.details,
+            substeps: substepsData,
+            completed: this.completed,
+            dateCreated: this.dateCreated
+        };
+    }
+
+    static fromJSON(data){
+        var assignment = new Assignment(
+            data.name,
+            data.subject,
+            data.deadline,
+            data.priority,
+            data.details
+        );
+        
+        assignment.id = data.id;
+        assignment.completed = data.completed;
+        assignment.dateCreated = new Date(data.dateCreated);
+        
+        if (data.substeps && data.substeps.length > 0) {
+            for (var i = 0; i < data.substeps.length; i++) {
+                var substep = Substep.fromJSON(data.substeps[i]);
+                assignment.substeps.push(substep);
+            }
+        }
+        
+        return assignment;
+    }
+} 
+</script>
+
+<script>//Substep.js
+class Substep extends Assignment {
+    constructor(name, description, parentId){
+        super(name);
+        this.description = description;
+        this.parentId = parentId;
+        this.subject = "";
+        this.deadline = null; 
+        this.priority = "";
+        this.details = "";
+        this.substeps = [];
+    }
+
+    generateId(){
+        return "substep_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    }
+
+    hasSubsteps(){
+        return false;
+    }
+
+    addSubstep(substep){
+        return false;
+    }
+
+    toggleComplete(){
+        this.completed = !this.completed;
+    }
+
+    toJSON(){
+        return {
+            id: this.id,
+            name: this.name,
+            description: this.description,
+            parentId: this.parentId,
+            completed: this.completed,
+            dateCreated: this.dateCreated
+        };
+    }
+
+    static fromJSON(data){
+        var substep = new Substep(
+            data.name,
+            data.description,
+            data.parentId
+        );
+        
+        substep.id = data.id;
+        substep.completed = data.completed;
+        substep.dateCreated = new Date(data.dateCreated);
+        
+        return substep;
+    }
+}
+</script>
+
+<script>//AssignmentManager.js
+class AssignmentManager {
+    constructor(userId) {
+        this.userId = userId;
+        this.assignments = [];
+        this.loadAssignments();
+    }
+
+    loadAssignments() {
+        var key = "assignments_" + this.userId;
+        var storedAssignments = localStorage.getItem(key);
+
+        if (storedAssignments) {
+            var parsedAssignments = JSON.parse(storedAssignments);
+            var currentAssignments = [];
+
+            for (var i = 0; i < parsedAssignments.length; i++) {
+                var data = parsedAssignments[i];
+                currentAssignments.push(Assignment.fromJSON(data));
+            }
+
+            this.assignments = currentAssignments;
+        }
+    }
+
+    saveAssignments(){
+        var key = "assignments_" + this.userId;
+        var assignmentsData = [];
+
+        for (var i = 0; i < this.assignments.length; i++) {
+            assignmentsData.push(this.assignments[i].toJSON());
+        }
+
+        localStorage.setItem(key, JSON.stringify(assignmentsData));
+    }
+}
+</script>
+
+<script>//User.js
+class User {
+    constructor(username, password){
+        this.id = this.generateId();
+        this.username = username;
+        this.password = password;
+    }
+
+    generateId(){
+        return "user_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    }
+
+    validatePassword(password) {
+        return this.password === password;
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            username: this.username,
+            password: this.password
+        };
+    }
+}
+</script>
+
+<script>//AuthManager.js
+class AuthManager{
+    constructor() {
+        var stored = JSON.parse(localStorage.getItem("users")) || [];
+
+        this.users = [];
+        for (var i = 0; i < stored.length; i++) {
+            var u = stored[i];
+            var userObj = new User(u.username, u.password);
+            userObj.id = u.id;
+            this.users.push(userObj);
+        }
+
+        this.currentUserId = localStorage.getItem("currentUserId") || null;
+    }
+
+    userExists(username) {
+        for (var i = 0; i < this.users.length; i++) {
+            if (this.users[i].username === username) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    signUp(username, password){
+        var errorMessage = document.getElementById("errorMessage");
+        
+        if (this.userExists(username)){
+            errorMessage.textContent = "Username already exists.";
+            return false;
+        }
+
+        var newUser = new User(username, password);
+        this.users.push(newUser);
+        localStorage.setItem("users", JSON.stringify(this.users)); 
+        
+        return true;
+    }
+
+    login(username, password){
+        var errorMessage = document.getElementById("errorMessage");
+        var user = null;
+
+        for (var i = 0; i < this.users.length; i++){
+            if (this.users[i].username === username) {
+                user = this.users[i];
+                break;
+            }
+        }
+
+        if(!user || !user.validatePassword(password)){
+            errorMessage.textContent = "Username or password are incorrect.";
+            return false;
+        }
+
+        this.currentUserId = user.id;
+        localStorage.setItem("currentUserId", user.id);
+        
+        return true;
+    }
+}
+</script>
+
+<script>
+var auth = new AuthManager();
+var currentUserId = auth.currentUserId || localStorage.getItem("currentUserId");
+var assignmentManager = new AssignmentManager(currentUserId);
+
+// gets assignment ID from URL
+var urlParams = new URLSearchParams(window.location.search);
+var assignmentId = urlParams.get('id');
+if (!assignmentId) { 
+    alert("No assignment selected");
+    window.location.href = "todo.html";
+}
+
+// finds assignment
+var currentAssignment = null;
+for (var i = 0; i < assignmentManager.assignments.length; i++) {
+    if (assignmentManager.assignments[i].id === assignmentId) {
+        currentAssignment = assignmentManager.assignments[i];
+        break;
+    }
+}
+
+if (!currentAssignment) {
+    alert("Assignment not found");
+    window.location.href = "todo.html";
+}
+
+// loads assignment details into page
+function loadAssignmentDetails() {
+    document.getElementById("assignmentName").innerText = currentAssignment.name;
+    document.getElementById("assignmentSubject").innerText = "Subject: " + (currentAssignment.subject || "No subject");
+    document.getElementById("assignmentDeadline").innerText = "Deadline: " + (currentAssignment.deadline || "No deadline");
+    document.getElementById("assignmentDetails").innerText = currentAssignment.details || "No details provided.";
+    
+    loadSubsteps();
+}
+
+// loads and displays substeps
+function loadSubsteps() {
+    var substepsList = document.getElementById("substepsList");
+    var noSubsteps = document.getElementById("noSubsteps");
+    
+    // clear existing substeps
+    var children = substepsList.children;
+    for (var i = children.length - 1; i >= 0; i--) {
+        if (children[i].id !== "noSubsteps") {
+            substepsList.removeChild(children[i]);
+        }
+    }
+    
+    if (currentAssignment.substeps.length === 0) {
+        noSubsteps.style.display = "block";
+        return;
+    }
+    
+    noSubsteps.style.display = "none";
+    
+    for (var i = 0; i < currentAssignment.substeps.length; i++) {
+        var substep = currentAssignment.substeps[i];
+        
+        var substepDiv = document.createElement("div");
+        
+        // checkbox
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = substep.completed;
+        checkbox.setAttribute("data-index", i);
+        checkbox.onchange = function() {
+            var index = parseInt(this.getAttribute("data-index"));
+            currentAssignment.substeps[index].toggleComplete();
+            currentAssignment.checkAutoComplete();
+            assignmentManager.saveAssignments();
+            loadSubsteps(); // refresh display
+        };
+        
+        // text
+        var text = document.createTextNode(" " + substep.name);
+        if (substep.description) {
+            text = document.createTextNode(" " + substep.name + " - " + substep.description);
+        }
+        
+        // delete button
+        var deleteBtn = document.createElement("button");
+        deleteBtn.innerText = "Delete";
+        deleteBtn.setAttribute("data-index", i);
+        deleteBtn.onclick = function() {
+            var index = parseInt(this.getAttribute("data-index"));
+            deleteSubstep(index);
+        };
+        
+        substepDiv.appendChild(checkbox);
+        substepDiv.appendChild(text);
+        substepDiv.appendChild(deleteBtn);
+        
+        substepsList.appendChild(substepDiv);
+    }
+}
+
+// toggles substep form visibility
+function toggleSubstepForm() {
+    var form = document.getElementById("substepForm");
+    if (form.style.display === "none") {
+        form.style.display = "block";
+        document.getElementById("substepName").focus();
+    } else {
+        form.style.display = "none";
+    }
+}
+
+// cancels substep form
+function cancelSubstepForm() {
+    document.getElementById("substepForm").style.display = "none";
+    document.getElementById("substepName").value = "";
+    document.getElementById("substepDescription").value = "";
+}
+
+// creates new substep
+function createSubstep() {
+    var name = document.getElementById("substepName").value.trim();
+    var description = document.getElementById("substepDescription").value.trim();
+    
+    if (!name) {
+        alert("Substep name is required");
+        return;
+    }
+    
+    var newSubstep = new Substep(name, description, currentAssignment.id);
+    currentAssignment.addSubstep(newSubstep);
+    assignmentManager.saveAssignments();
+    
+    cancelSubstepForm();
+    loadSubsteps();
+}
+
+// deletes substep
+function deleteSubstep(index) {
+    if (confirm("Delete this substep?")) {
+        var substepId = currentAssignment.substeps[index].id;
+        currentAssignment.removeSubstep(substepId);
+        assignmentManager.saveAssignments();
+        loadSubsteps();
+    }
+}
+
+// edits assignment
+function editAssignment() {
+    var name = prompt("Assignment name:", currentAssignment.name);
+    if (name === null) return;
+    
+    if (name.trim() === "") {
+        alert("Assignment name cannot be empty");
+        return;
+    }
+    
+    var subject = prompt("Subject:", currentAssignment.subject);
+    if (subject === null) return;
+    
+    var deadline = prompt("Deadline (dd/mm/yyyy):", currentAssignment.deadline);
+    if (deadline === null) return;
+    
+    var priority = prompt("Priority (low/medium/high):", currentAssignment.priority);
+    if (priority === null) return;
+    
+    var validPriorities = ["low", "medium", "high"];
+    if (priority && validPriorities.indexOf(priority.toLowerCase()) === -1) {
+        alert("Priority must be low, medium, or high");
+        return;
+    }
+    
+    var details = prompt("Details:", currentAssignment.details);
+    if (details === null) return;
+    
+    currentAssignment.name = name.trim();
+    currentAssignment.subject = subject.trim();
+    currentAssignment.deadline = deadline.trim();
+    currentAssignment.priority = priority.toLowerCase();
+    currentAssignment.details = details.trim();
+    
+    assignmentManager.saveAssignments();
+    loadAssignmentDetails();
+    
+    alert("Assignment updated!");
+}
+
+// deletes assignment
+function deleteAssignment() {
+    var message = "Are you sure you want to delete '" + currentAssignment.name + "'?";
+    
+    if (currentAssignment.substeps.length > 0) {
+        message += " This will delete " + currentAssignment.substeps.length + " substep(s).";
+    }
+    
+    if (confirm(message)) {
+        var newAssignments = [];
+        for (var i = 0; i < assignmentManager.assignments.length; i++) {
+            if (assignmentManager.assignments[i].id !== assignmentId) {
+                newAssignments.push(assignmentManager.assignments[i]);
+            }
+        }
+        assignmentManager.assignments = newAssignments;
+        
+        assignmentManager.saveAssignments();
+        alert("Assignment deleted successfully");
+        window.location.href = "todo.html";
+    }
+}
+
+// loads assignment on page
+loadAssignmentDetails();
+</script>
